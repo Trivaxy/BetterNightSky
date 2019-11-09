@@ -3,6 +3,8 @@ using Terraria;
 using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Xna.Framework;
 
 namespace BetterNightSky
 {
@@ -64,16 +66,15 @@ namespace BetterNightSky
 			}
 		}
 
-		public override void Unload()
-		{
-			CelestialIndex.Clear();
+		private TaskCompletionSource<bool> unloadTcs;
 
-			if (!Main.dedServ)
-			{
+		public override void UpdateMusic(ref int music, ref MusicPriority priority) {
+			if (unloadTcs != null) {
 				Array.Resize<Texture2D>(ref Main.starTexture, 5);
 				Array.Resize<Star>(ref Main.star, 130);
 
 				Main.numStars = 130;
+				Main.rand = new Terraria.Utilities.UnifiedRandom();
 				Star.SpawnStars();
 
 				for (int i = 0; i < Main.star.Length; i++)
@@ -86,14 +87,31 @@ namespace BetterNightSky
 
 				for (int i = 0; i < 5; i++)
 				{
-					Main.starTexture[i] = ModLoader.GetTexture("Terraria/Star_" + i);
+					Main.starTexture[i] = ModContent.GetTexture("Terraria/Star_" + i);
 				}
 
 				for (int i = 0; i < Main.moonTexture.Length; i++)
 				{
-					Main.moonTexture[i] = ModLoader.GetTexture("Terraria/Moon_" + i);
+					Main.moonTexture[i] = ModContent.GetTexture("Terraria/Moon_" + i);
 				}
+				unloadTcs.SetResult(true);
+				unloadTcs = null;
 			}
+		}
+
+		public override void Unload()
+		{
+			CelestialIndex.Clear();
+			Main.numStars = 0;
+
+			if (!Main.dedServ)
+			{
+				// Unload runs on another thread. To ensure we don't replace textures as they are drawing, we use UpdateMusic which will run on the next frame to actually swap the textures.
+				var tcs = new TaskCompletionSource<bool>();
+				unloadTcs = tcs;
+				tcs.Task.Wait();
+			}
+			Main.numStars = 130;
 		}
 
 		//Extracted from normal vanilla code because Main.numStars was hardcoded to 130 in there
